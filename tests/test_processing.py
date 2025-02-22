@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 from rdkit import Chem
 
-from src.data.processing import fetch_and_prepare_data, convert_smiles_to_adjacency_matrix, get_atom_features, get_atomic_number_features, get_hydrogen_and_neighbors_features, get_aromaticity_feature, get_hybridization_features, get_ring_and_charge_features
+from src.data.processing import *
 
 
 @pytest.fixture
@@ -320,3 +320,61 @@ def test_get_ring_and_charge_features():
 
     # Check formal charge
     assert features[1] == -1  # Oxygen in hydroxide has a formal charge of -1
+
+
+def test_convert_smiles_to_matrices_valid_smiles():
+    smiles = "CCO"
+    adj_matrix, feature_matrix = convert_smiles_to_matrices(smiles)
+
+    assert isinstance(adj_matrix, np.ndarray)
+    assert isinstance(feature_matrix, np.ndarray)
+    assert adj_matrix.shape == (150, 150)
+    assert feature_matrix.shape == (150, feature_matrix.shape[1])
+
+    # Check if the original adjacency matrix is correctly placed in the padded matrix
+    mol = Chem.MolFromSmiles(smiles)
+    original_adj_matrix = create_adjacency_matrix(mol)
+    assert np.array_equal(adj_matrix[:original_adj_matrix.shape[0],
+                          :original_adj_matrix.shape[1]], original_adj_matrix)
+
+    # Check if the original feature matrix is correctly placed in the padded matrix
+    original_feature_matrix = extract_atom_feature_matrix(mol)
+    assert np.array_equal(feature_matrix[:original_feature_matrix.shape[0],
+                          :original_feature_matrix.shape[1]], original_feature_matrix)
+
+
+def test_convert_smiles_to_matrices_invalid_smiles():
+    smiles = "invalid_smiles"
+    adj_matrix, feature_matrix = convert_smiles_to_matrices(smiles)
+
+    assert adj_matrix is None
+    assert feature_matrix is None
+
+
+def test_convert_smiles_to_matrices_empty_smiles():
+    smiles = ""
+    adj_matrix, feature_matrix = convert_smiles_to_matrices(smiles)
+
+    assert adj_matrix is None
+    assert feature_matrix is None
+
+
+def test_convert_smiles_to_matrices_large_molecule():
+    smiles = "C" * 200  # A large molecule with 200 carbon atoms
+    adj_matrix, feature_matrix = convert_smiles_to_matrices(smiles)
+
+    assert isinstance(adj_matrix, np.ndarray)
+    assert isinstance(feature_matrix, np.ndarray)
+    assert adj_matrix.shape == (150, 150)
+    assert feature_matrix.shape == (150, feature_matrix.shape[1])
+
+    # Check if the original adjacency matrix is correctly placed in the padded matrix
+    mol = Chem.MolFromSmiles(smiles)
+    original_adj_matrix = create_adjacency_matrix(mol)
+    assert np.array_equal(adj_matrix[:original_adj_matrix.shape[0],
+                          :original_adj_matrix.shape[1]], original_adj_matrix[:150, :150])
+
+    # Check if the original feature matrix is correctly placed in the padded matrix
+    original_feature_matrix = extract_atom_feature_matrix(mol)
+    assert np.array_equal(feature_matrix[:original_feature_matrix.shape[0],
+                          :original_feature_matrix.shape[1]], original_feature_matrix[:150, :])
