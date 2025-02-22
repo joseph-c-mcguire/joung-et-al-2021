@@ -7,17 +7,141 @@ Functions:
 - prepare_dataset(filepath: str) -> pd.DataFrame:
 """
 
+from typing import Tuple, Optional
 
 import pandas as pd
 import numpy as np
 from rdkit import Chem
 
 
-def load_and_clean_data(filepath):
+def get_atom_features(atom: Chem.rdchem.Atom) -> list:
+    """
+    Generate a list of features for a given atom.
+
+    Args:
+        atom (rdkit.Chem.rdchem.Atom): The atom for which features are to be generated.
+
+    Returns:
+    list: A list of features representing the atom, including:
+        - One-hot encoding of the atomic number (length 118).
+        - Total number of hydrogen atoms attached to the atom.
+        - Number of heavy atom neighbors (atomic number > 1).
+        - Aromaticity (1 if aromatic, 0 otherwise).
+        - Hybridization type (SP, SP2, SP3) as a list of binary values.
+        - Whether the atom is in a ring (1 if in a ring, 0 otherwise).
+        - Formal charge of the atom.
+    """
+
+    features = []
+
+    # Atom identity (one-hot encoding of atomic number)
+    atomic_num = atom.GetAtomicNum()
+    atom_features = np.zeros(118)  # Max atomic number
+    atom_features[atomic_num-1] = 1
+    features.extend(atom_features.tolist())
+
+    features.extend(
+        (
+            atom.GetTotalNumHs(),
+            len([n for n in atom.GetNeighbors() if n.GetAtomicNum() > 1]),
+            int(atom.GetIsAromatic()),
+        )
+    )
+    # Hybridization
+    hyb_types = [Chem.rdchem.HybridizationType.SP,
+                 Chem.rdchem.HybridizationType.SP2,
+                 Chem.rdchem.HybridizationType.SP3]
+    features.extend([int(atom.GetHybridization() == hyb) for hyb in hyb_types])
+
+    features.extend((int(atom.IsInRing()), atom.GetFormalCharge()))
+    return features
+
+
+def smiles_to_matrices(smiles: str, max_size: int = 150) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Converts a SMILES string to its corresponding adjacency and feature matrices,
+    with optional padding to a specified maximum size.
+
+    Args:
+    smiles (str): The SMILES string representing the molecular structure.
+    max_size (int, optional): The maximum size for padding the matrices. Default is 150.
+
+    Returns:
+    tuple: A tuple containing the padded adjacency matrix and the padded feature matrix.
+           If the SMILES string is invalid or an error occurs, returns (None, None).
+    """
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            return None, None
+
+        adj_matrix = get_adjacency_matrix(mol)
+        feature_matrix = get_feature_matrix(mol)
+
+        padded_adj = pad_matrix(adj_matrix, max_size)
+        padded_features = pad_matrix(
+            feature_matrix, max_size, feature_matrix.shape[1])
+
+        return padded_adj, padded_features
+    except Exception:
+        return None, None
+
+
+def get_adjacency_matrix(mol: Chem.rdchem.Mol) -> np.ndarray:
+    """
+    Generate the adjacency matrix for a given molecule.
+
+    Args:
+        mol (rdkit.Chem.rdchem.Mol): The molecule for which to generate the adjacency matrix.
+
+    Returns:
+        numpy.ndarray: The adjacency matrix of the molecule.
+    """
+    return Chem.GetAdjacencyMatrix(mol)
+
+
+def get_feature_matrix(mol: Chem.rdchem.Mol) -> np.ndarray:
+    """
+    Get feature matrix from molecule.
+
+    Parameters:
+        mol (rdkit.Chem.Mol): The molecule from which to extract the feature matrix.
+
+    Returns:
+        numpy.ndarray: A 2D array where each row represents the features of an atom in the molecule.
+    """
+    return np.array([get_atom_features(atom) for atom in mol.GetAtoms()])
+
+
+def pad_matrix(matrix: np.ndarray, max_size: int, feature_size: Optional[int] = None) -> np.ndarray:
+    """
+    Pads a given matrix to a specified maximum size.
+
+    Args:
+        matrix (numpy.ndarray): The input matrix to be padded.
+        max_size (int): The desired size to pad the matrix to. If the matrix is larger than this size, it will be truncated.
+        feature_size (int, optional): The number of features for each row. If provided, the matrix will be padded/truncated accordingly.
+
+    Returns:
+        numpy.ndarray: The padded (or truncated) matrix with dimensions (max_size, max_size) or (max_size, feature_size).
+    """
+    n_atoms = matrix.shape[0]
+    if n_atoms >= max_size:
+        return matrix[:max_size, :max_size] if feature_size is None else matrix[:max_size, :]
+
+    padded_matrix = np.zeros(
+        (max_size, max_size if feature_size is None else feature_size))
+    padded_matrix[:n_atoms,
+                  :n_atoms] = matrix if feature_size is None else matrix[:n_atoms, :]
+
+    return padded_matrix
+
+
+def load_and_clean_data(filepath: str) -> pd.DataFrame:
     """
     Load and perform initial cleaning of the dataset.
 
-    Parameters:
+    Args:
     filepath (str): The path to the dataset file.
 
     Returns:
@@ -30,7 +154,7 @@ def smiles_to_adjacency(smiles: str) -> np.ndarray:
     """
     Converts a SMILES string to an adjacency matrix.
 
-    Parameters:
+    Args:
     smiles (str): A string representing the SMILES notation of a molecule.
 
     Returns:
@@ -50,8 +174,10 @@ def impute_missing_values(df: pd.DataFrame) -> pd.DataFrame:
 
     Args:
     df (pandas.DataFrame): The input DataFrame containing the data to be imputed.
+
     Returns:
     pandas.DataFrame: The DataFrame with missing values imputed in the specified numeric columns.
+
     Notes:
     The following columns are imputed using their respective median values:
     - 'Lifetime (ns)'
@@ -92,8 +218,13 @@ def process_molecular_data(df: pd.DataFrame) -> pd.DataFrame:
                       'Chromophore_Matrix' and 'Solvent_Matrix' containing 
                       the adjacency matrices.
     """
-    df['Chromophore_Matrix'] = df['Chromophore'].apply(smiles_to_adjacency)
-    df['Solvent_Matrix'] = df['Solvent'].apply(smiles_to_adjacency)
+    df['Chromophore_Adj'] = df['Chromophore'].apply(
+        lambda x: smiles_to_matrices(x)[0])
+    df['Chromophore_Features'] = df['Chromophore'].apply(
+        lambda x: smiles_to_matrices(x)[1])
+    df['Solvent_Adj'] = df['Solvent'].apply(lambda x: smiles_to_matrices(x)[0])
+    df['Solvent_Features'] = df['Solvent'].apply(
+        lambda x: smiles_to_matrices(x)[1])
     return df
 
 

@@ -11,3 +11,10 @@ dependencies = [
     "numpy>=1.18.1,<2.0.0",
     "rdkit>=2020.03.3,<2021.0.0"
 ]
+# Optional development dependencies
+dev = [
+    "pytest>=6.0.0,<7.0.0",
+    "black>=19.10b0,<20.0",
+    "pep8>=1.7.1,<2.0.0",
+    "flake8>=3.8.3,<4.0.0", 
+]
