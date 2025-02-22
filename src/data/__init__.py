@@ -1,3 +1,4 @@
-from src.data.processing import prepare_dataset, smiles_to_adjacency, impute_missing_values
+from src.data.processing import load_and_process_dataset, convert_smiles_to_adjacency_matrix, fill_missing_numerics
 
-__all__ = ['prepare_dataset', 'smiles_to_adjacency', 'impute_missing_values']
+__all__ = ['load_and_process_dataset',
+           'convert_smiles_to_adjacency_matrix', 'fill_missing_numerics']

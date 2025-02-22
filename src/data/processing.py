@@ -1,14 +1,20 @@
-""" This module provides functions for loading, cleaning, and processing molecular data from a dataset file.
+"""
+This module provides functions for processing molecular data, including feature extraction from atoms,
+conversion of SMILES strings to adjacency and feature matrices, and data cleaning and imputation.
 Functions:
-- load_and_clean_data(filepath: str) -> pd.DataFrame:
-- smiles_to_adjacency(smiles: str) -> np.ndarray:
-- impute_missing_values(df: pd.DataFrame) -> pd.DataFrame:
-- process_molecular_data(df: pd.DataFrame) -> pd.DataFrame:
-- prepare_dataset(filepath: str) -> pd.DataFrame:
+    get_atom_features(atom: Chem.rdchem.Atom) -> list:
+    convert_smiles_to_matrices(smiles: str, max_size: int = 150) -> Tuple[np.ndarray, np.ndarray]:
+    create_adjacency_matrix(mol: Chem.rdchem.Mol) -> np.ndarray:
+    extract_atom_feature_matrix(mol: Chem.rdchem.Mol) -> np.ndarray:
+    resize_and_pad_matrix(matrix: np.ndarray, max_size: int, feature_size: Optional[int] = None) -> np.ndarray:
+    fetch_and_prepare_data(filepath: str) -> pd.DataFrame:
+    convert_smiles_to_adjacency_matrix(smiles: str) -> np.ndarray:
+    fill_missing_numerics(df: pd.DataFrame) -> pd.DataFrame:
+    convert_smiles_to_adjacency_matrices(df: pd.DataFrame) -> pd.DataFrame:
+    load_and_process_dataset(filepath: str) -> pd.DataFrame:
 """
 
 from typing import Tuple, Optional
-
 import pandas as pd
 import numpy as np
 from rdkit import Chem
@@ -57,7 +63,7 @@ def get_atom_features(atom: Chem.rdchem.Atom) -> list:
     return features
 
 
-def smiles_to_matrices(smiles: str, max_size: int = 150) -> Tuple[np.ndarray, np.ndarray]:
+def convert_smiles_to_matrices(smiles: str, max_size: int = 150) -> Tuple[np.ndarray, np.ndarray]:
     """
     Converts a SMILES string to its corresponding adjacency and feature matrices,
     with optional padding to a specified maximum size.
@@ -75,11 +81,11 @@ def smiles_to_matrices(smiles: str, max_size: int = 150) -> Tuple[np.ndarray, np
         if mol is None:
             return None, None
 
-        adj_matrix = get_adjacency_matrix(mol)
-        feature_matrix = get_feature_matrix(mol)
+        adj_matrix = create_adjacency_matrix(mol)
+        feature_matrix = extract_atom_feature_matrix(mol)
 
-        padded_adj = pad_matrix(adj_matrix, max_size)
-        padded_features = pad_matrix(
+        padded_adj = resize_and_pad_matrix(adj_matrix, max_size)
+        padded_features = resize_and_pad_matrix(
             feature_matrix, max_size, feature_matrix.shape[1])
 
         return padded_adj, padded_features
@@ -87,7 +93,7 @@ def smiles_to_matrices(smiles: str, max_size: int = 150) -> Tuple[np.ndarray, np
         return None, None
 
 
-def get_adjacency_matrix(mol: Chem.rdchem.Mol) -> np.ndarray:
+def create_adjacency_matrix(mol: Chem.rdchem.Mol) -> np.ndarray:
     """
     Generate the adjacency matrix for a given molecule.
 
@@ -100,7 +106,7 @@ def get_adjacency_matrix(mol: Chem.rdchem.Mol) -> np.ndarray:
     return Chem.GetAdjacencyMatrix(mol)
 
 
-def get_feature_matrix(mol: Chem.rdchem.Mol) -> np.ndarray:
+def extract_atom_feature_matrix(mol: Chem.rdchem.Mol) -> np.ndarray:
     """
     Get feature matrix from molecule.
 
@@ -113,7 +119,7 @@ def get_feature_matrix(mol: Chem.rdchem.Mol) -> np.ndarray:
     return np.array([get_atom_features(atom) for atom in mol.GetAtoms()])
 
 
-def pad_matrix(matrix: np.ndarray, max_size: int, feature_size: Optional[int] = None) -> np.ndarray:
+def resize_and_pad_matrix(matrix: np.ndarray, max_size: int, feature_size: Optional[int] = None) -> np.ndarray:
     """
     Pads a given matrix to a specified maximum size.
 
@@ -137,7 +143,7 @@ def pad_matrix(matrix: np.ndarray, max_size: int, feature_size: Optional[int] = 
     return padded_matrix
 
 
-def load_and_clean_data(filepath: str) -> pd.DataFrame:
+def fetch_and_prepare_data(filepath: str) -> pd.DataFrame:
     """
     Load and perform initial cleaning of the dataset.
 
@@ -150,7 +156,7 @@ def load_and_clean_data(filepath: str) -> pd.DataFrame:
     return pd.read_csv(filepath, sep='\t')
 
 
-def smiles_to_adjacency(smiles: str) -> np.ndarray:
+def convert_smiles_to_adjacency_matrix(smiles: str) -> np.ndarray:
     """
     Converts a SMILES string to an adjacency matrix.
 
@@ -168,7 +174,7 @@ def smiles_to_adjacency(smiles: str) -> np.ndarray:
         return None
 
 
-def impute_missing_values(df: pd.DataFrame) -> pd.DataFrame:
+def fill_missing_numerics(df: pd.DataFrame) -> pd.DataFrame:
     """
     Impute missing values in specified numeric columns of a DataFrame using the median.
 
@@ -200,7 +206,7 @@ def impute_missing_values(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def process_molecular_data(df: pd.DataFrame) -> pd.DataFrame:
+def convert_smiles_to_adjacency_matrices(df: pd.DataFrame) -> pd.DataFrame:
     """
     Processes molecular data by converting SMILES strings to adjacency matrices.
 
@@ -219,16 +225,17 @@ def process_molecular_data(df: pd.DataFrame) -> pd.DataFrame:
                       the adjacency matrices.
     """
     df['Chromophore_Adj'] = df['Chromophore'].apply(
-        lambda x: smiles_to_matrices(x)[0])
+        lambda x: convert_smiles_to_matrices(x)[0])
     df['Chromophore_Features'] = df['Chromophore'].apply(
-        lambda x: smiles_to_matrices(x)[1])
-    df['Solvent_Adj'] = df['Solvent'].apply(lambda x: smiles_to_matrices(x)[0])
+        lambda x: convert_smiles_to_matrices(x)[1])
+    df['Solvent_Adj'] = df['Solvent'].apply(
+        lambda x: convert_smiles_to_matrices(x)[0])
     df['Solvent_Features'] = df['Solvent'].apply(
-        lambda x: smiles_to_matrices(x)[1])
+        lambda x: convert_smiles_to_matrices(x)[1])
     return df
 
 
-def prepare_dataset(filepath: str) -> pd.DataFrame:
+def load_and_process_dataset(filepath: str) -> pd.DataFrame:
     """
     Prepares the dataset by loading, cleaning, imputing missing values, and processing molecular data.
 
@@ -238,7 +245,7 @@ def prepare_dataset(filepath: str) -> pd.DataFrame:
     Returns:
         pandas.DataFrame: The processed dataset.
     """
-    df = load_and_clean_data(filepath)
-    df = impute_missing_values(df)
-    df = process_molecular_data(df)
+    df = fetch_and_prepare_data(filepath)
+    df = fill_missing_numerics(df)
+    df = convert_smiles_to_adjacency_matrices(df)
     return df
