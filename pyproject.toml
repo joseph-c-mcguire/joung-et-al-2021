@@ -1,0 +1,13 @@
+[project]
+name = "joung-et-al-2021"
+version = "0.1.0"
+description = "A project based on the Joung et al. 2021 paper"
+authors = [
+    { name = "Joseph McGuire", email = "joseph.c.mcg@gmail.com" }
+]
+license = "MIT"
+dependencies = [
+    "pandas>=1.0.0,<2.0.0",
+    "numpy>=1.18.1,<2.0.0",
+    "rdkit>=2020.03.3,<2021.0.0"
+]
