@@ -28,39 +28,99 @@ def get_atom_features(atom: Chem.rdchem.Atom) -> list:
         atom (rdkit.Chem.rdchem.Atom): The atom for which features are to be generated.
 
     Returns:
-    list: A list of features representing the atom, including:
-        - One-hot encoding of the atomic number (length 118).
-        - Total number of hydrogen atoms attached to the atom.
-        - Number of heavy atom neighbors (atomic number > 1).
-        - Aromaticity (1 if aromatic, 0 otherwise).
-        - Hybridization type (SP, SP2, SP3) as a list of binary values.
-        - Whether the atom is in a ring (1 if in a ring, 0 otherwise).
-        - Formal charge of the atom.
+    list: A list of features representing the atom.
     """
-
     features = []
+    features.extend(get_atomic_number_features(atom))
+    features.extend(get_hydrogen_and_neighbors_features(atom))
+    features.extend(get_aromaticity_feature(atom))
+    features.extend(get_hybridization_features(atom))
+    features.extend(get_ring_and_charge_features(atom))
+    return features
 
-    # Atom identity (one-hot encoding of atomic number)
+
+def get_atomic_number_features(atom: Chem.rdchem.Atom) -> list:
+    """
+    Generate one-hot encoding of the atomic number.
+
+    Args:
+        atom (rdkit.Chem.rdchem.Atom): The atom for which features are to be generated.
+
+    Returns:
+        list: One-hot encoding of the atomic number (length 118).
+    """
     atomic_num = atom.GetAtomicNum()
     atom_features = np.zeros(118)  # Max atomic number
-    atom_features[atomic_num-1] = 1
-    features.extend(atom_features.tolist())
+    atom_features[atomic_num - 1] = 1
+    return atom_features.tolist()
 
-    features.extend(
-        (
-            atom.GetTotalNumHs(),
-            len([n for n in atom.GetNeighbors() if n.GetAtomicNum() > 1]),
-            int(atom.GetIsAromatic()),
-        )
-    )
-    # Hybridization
+
+def get_hydrogen_and_neighbors_features(atom: Chem.rdchem.Atom) -> list:
+    """
+    Generate features related to hydrogen atoms and heavy atom neighbors.
+
+    Args:
+        atom (rdkit.Chem.rdchem.Atom): The atom for which features are to be generated.
+
+    Returns:
+        list: Total number of hydrogen atoms attached to the atom and number of heavy atom neighbors.
+    """
+    return [
+        atom.GetTotalNumHs(),
+        len([n for n in atom.GetNeighbors() if n.GetAtomicNum() > 1]),
+    ]
+
+
+def get_aromaticity_feature(atom: Chem.rdchem.Atom) -> list:
+    """
+    Generate aromaticity feature.
+
+    Args:
+        atom (rdkit.Chem.rdchem.Atom): The atom for which features are to be generated.
+
+    Returns:
+        list: Aromaticity (1 if aromatic, 0 otherwise).
+
+    Notes: 
+        Aromaticity is a property of cyclic (ring-shaped), planar (flat) structures with a ring of resonance bonds that leads to enhanced stability. Aromatic compounds are typically characterized by alternating double and single bonds in a ring structure.
+    """
+    return [int(atom.GetIsAromatic())]
+
+
+def get_hybridization_features(atom: Chem.rdchem.Atom) -> list:
+    """
+    Generate hybridization type features.
+
+    Args:
+        atom (rdkit.Chem.rdchem.Atom): The atom for which features are to be generated.
+
+    Returns:
+        list: Hybridization type (SP, SP2, SP3) as a list of binary values.
+
+    Notes:
+        Hybridization refers to the mixing of atomic orbitals to form new hybrid orbitals suitable for bonding. The three main types are SP, SP2, and SP3, corresponding to one, two, and three hybrid orbitals, respectively.
+    """
     hyb_types = [Chem.rdchem.HybridizationType.SP,
                  Chem.rdchem.HybridizationType.SP2,
                  Chem.rdchem.HybridizationType.SP3]
-    features.extend([int(atom.GetHybridization() == hyb) for hyb in hyb_types])
+    return [int(atom.GetHybridization() == hyb) for hyb in hyb_types]
 
-    features.extend((int(atom.IsInRing()), atom.GetFormalCharge()))
-    return features
+
+def get_ring_and_charge_features(atom: Chem.rdchem.Atom) -> list:
+    """
+    Generate ring and formal charge features.
+
+    Args:
+        atom (rdkit.Chem.rdchem.Atom): The atom for which features are to be generated.
+
+    Returns:
+        list: Whether the atom is in a ring (1 if in a ring, 0 otherwise) and formal charge of the atom.
+
+    Notes:
+        - A ring is a closed loop of atoms connected by bonds.
+        - Formal charge is the charge assigned to an atom in a molecule, assuming that electrons in a chemical bond are shared equally between atoms.
+    """
+    return [int(atom.IsInRing()), atom.GetFormalCharge()]
 
 
 def convert_smiles_to_matrices(smiles: str, max_size: int = 150) -> Tuple[np.ndarray, np.ndarray]:
@@ -75,6 +135,10 @@ def convert_smiles_to_matrices(smiles: str, max_size: int = 150) -> Tuple[np.nda
     Returns:
     tuple: A tuple containing the padded adjacency matrix and the padded feature matrix.
            If the SMILES string is invalid or an error occurs, returns (None, None).
+
+    Notes:
+        The adjacency matrix is a square matrix representing the connectivity of atoms in a molecule.
+        The feature matrix is a 2D array where each row represents the features of an atom in the molecule.
     """
     try:
         mol = Chem.MolFromSmiles(smiles)
